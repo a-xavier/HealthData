@@ -1,0 +1,15 @@
+# Mac 
+.DS_Store
+
+# Nextflow
+.nextflow.log*
+.nextflow/
+work/
+
+# Sensitive data 
+Generation_Scotland/
+UKB/
+
+# all pairs is too big
+Reference/all_pairs.txt
+Reference/all_observed_pair.txt

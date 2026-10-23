@@ -1,0 +1,202 @@
+#!/usr/bin/env Rscript
+library(data.table)
+library(fastglm)
+args <- commandArgs(trailingOnly = TRUE)
+
+code_1 <- args[1]
+code_2 <- args[2]
+cohort_code <- args[3]
+final_df <- args[4]
+
+print(paste("Processing pair:", code_1, code_2, "for cohort", cohort_code, "with final df", final_df))
+
+# Load necessary libraries
+# Take a pair of codes and process them
+
+# 1 load final dataframe
+df <- fread(
+    final_df,
+    stringsAsFactors = FALSE,
+    check.names = FALSE,
+    data.table = FALSE,
+    showProgress = FALSE,
+    nThread = 1
+)
+all_levels <- df$all_levels
+all_levels[is.na(all_levels)] <- ""
+
+
+code_1_present <- grepl(
+    code_1,
+    all_levels,
+    fixed = TRUE
+)
+
+code_2_present <- grepl(
+    code_2,
+    all_levels,
+    fixed = TRUE
+)
+
+# count a b c d as 
+# a: people with code 1 
+# b: people with code 2
+# c: people with both code 1 and code 2
+# d: people with neither code 1 nor code 2
+
+code_1_count <- sum(code_1_present)
+code_2_count <- sum(code_2_present)
+both_count <- sum(code_1_present & code_2_present)
+
+c <- as.numeric(both_count)
+a <- as.numeric(code_1_count - both_count)
+b <- as.numeric(code_2_count - both_count)
+d <- as.numeric(length(all_levels) - a - b - c)
+
+# assign to dataframe
+df$code_1 <- as.integer(code_1_present)
+df$code_2 <- as.integer(code_2_present)
+
+print(paste("Counts - only code_1:", a, "only code_2:", b, "both codes:", c, "neither code:", d))
+
+# Based on this do fisher test with OR p and CI High Low reported 
+fisher_matrix <- matrix(c(c, a, b, d), nrow = 2)
+fisher_result <- fisher.test(fisher_matrix)
+odds_ratio <- fisher_result$estimate
+p_value <- fisher_result$p.value
+conf_int <- fisher_result$conf.int
+
+print(paste("Fisher Test - Odds Ratio:", odds_ratio, "P-value:", p_value, "CI Low:", conf_int[1], "CI High:", conf_int[2]))
+
+
+# Now do relative risk of code_1 given code_2 
+# and relative risk of code_2 given code_1
+
+rr_code1_given_code2 <- (c / (c + b)) / (a / (a + d))
+rr_code2_given_code1 <- (c / (c + a)) / (b / (b + d))
+print(paste("Relative Risk - code_1 given code_2:", rr_code1_given_code2, "code_2 given code_1:", rr_code2_given_code1))
+
+# Now do phi coefficient 
+# Only if all required counts are non-zero
+if (a + b == 0 || c + d == 0 || a + c == 0 || b + d == 0) {
+  phi_coefficient <- NA
+} else {
+  phi_coefficient <- (c * d - a * b) / sqrt((a + b) * (c + d) * (a + c) * (b + d))
+}
+# print phi coefficient
+print(paste("Phi Coefficient:", phi_coefficient))
+
+# do jaccard index
+jaccard_index <- c / (a + b + c)
+print(paste("Jaccard Index:", jaccard_index))
+
+# Now let's do glms with code_1 ~ code_2 + covariates 
+# and code_2 ~ code_1 + covariates 
+
+# ==================================== #
+#       LINEAR MODELLING                #
+# ==================================== #
+
+# if cohosrt code is GS then add famid as covariate
+code_1_formula <- if (cohort_code == "GS") {
+    as.formula("code_1 ~ code_2 + is_male + age_at_recruitment + BMI + smokever + dpw_moderate_activity + dpw_vigorous_activity + drinking_events_per_month + PC1 + PC2 + PC3 + PC4 + PC5 + famid")
+  } else {
+    as.formula("code_1 ~ code_2 + is_male + age_at_recruitment + BMI + smokever + dpw_moderate_activity + dpw_vigorous_activity + drinking_events_per_month + PC1 + PC2 + PC3 + PC4 + PC5")
+  }
+
+code_2_formula <- if (cohort_code == "GS") {
+    as.formula("code_2 ~ code_1 + is_male + age_at_recruitment + BMI + smokever + dpw_moderate_activity + dpw_vigorous_activity + drinking_events_per_month + PC1 + PC2 + PC3 + PC4 + PC5 + famid")
+    } else {
+        as.formula("code_2 ~ code_1 + is_male + age_at_recruitment + BMI + smokever + dpw_moderate_activity + dpw_vigorous_activity + drinking_events_per_month + PC1 + PC2 + PC3 + PC4 + PC5")
+    }
+
+# Fit the GLMs
+glm_code_1 <- fastglm(
+    code_1_formula,
+    data = df,
+    family = binomial(),
+    model = FALSE,
+    x = FALSE,
+    y = FALSE
+)
+glm_code_2 <- fastglm(
+    code_2_formula,
+    data = df,
+    family = binomial(),
+    model = FALSE,
+    x = FALSE,
+    y = FALSE
+)
+
+# Coefficients for the GLMs
+coef_code_1 <- summary(glm_code_1)$coefficients
+coef_code_2 <- summary(glm_code_2)$coefficients
+
+
+# Organise nice report ( we need one df that is only one line)
+code_1_vs_code_2 = coef_code_1["code_2", c("Estimate", "Std. Error", "z value", "Pr(>|z|)")]
+code_2_vs_code_1 = coef_code_2["code_1", c("Estimate", "Std. Error", "z value", "Pr(>|z|)")]
+
+
+# ==================================== #
+#       P-VALUE ADJUSTMENTS             #
+# ==================================== #
+
+# For all p values (OR and both GLM) check p value == 0 and replace with 1e-308 (lowest R float)
+
+# Lowest R float is 2.225074e-308 so we use 5e-308 as a safe minimum value for p-values
+# Highest value is 1.797693e+308 let's use 1e308 (use -1e308 for negative inf)
+
+if (p_value == 0) p_value <- 1e-308
+if (code_1_vs_code_2["Pr(>|z|)"] == 0) code_1_vs_code_2["Pr(>|z|)"] <- 5e-308
+if (code_2_vs_code_1["Pr(>|z|)"] == 0) code_2_vs_code_1["Pr(>|z|)"] <- 5e-308
+
+# Now check for infs (positive infs) for
+# ODDs ratio 
+if (odds_ratio == Inf) odds_ratio <- 1e308
+if (odds_ratio == 0) odds_ratio <- 5e-308
+# relative risks
+if (rr_code1_given_code2 == Inf) rr_code1_given_code2 <- 1e308
+if (rr_code2_given_code1 == Inf) rr_code2_given_code1 <- 1e308
+if (rr_code1_given_code2 == 0) rr_code1_given_code2 <- 5e-308
+if (rr_code2_given_code1 == 0) rr_code2_given_code1 <- 5e-308
+
+# fisher_conf_int_high can be inf or 0 
+if (conf_int[2] == Inf) conf_int[2] <- 1e308
+if (conf_int[1] == 0) conf_int[1] <- 5e-308
+
+
+# ==================================== #
+#       REPORT DATAFRAME CREATION       #
+# ==================================== #
+
+
+report_df <- data.frame(
+    code_1 = code_1,
+    code_2 = code_2,
+    code_1_only = a,
+    code_2_only = b,
+    both_codes = c,
+    neither_code = d,
+    fisher_odds_ratio = odds_ratio,
+    fisher_p_value = p_value,
+    fisher_conf_int_low = conf_int[1],
+    fisher_conf_int_high = conf_int[2],
+    rr_code1_given_code2 = rr_code1_given_code2,
+    rr_code2_given_code1 = rr_code2_given_code1,
+    phi_coefficient = phi_coefficient,
+    jaccard_index = jaccard_index,
+    code_1_vs_code_2_estimate = code_1_vs_code_2["Estimate"],
+    code_1_vs_code_2_std_error = code_1_vs_code_2["Std. Error"],
+    code_1_vs_code_2_z_value = code_1_vs_code_2["z value"],
+    code_1_vs_code_2_p_value = code_1_vs_code_2["Pr(>|z|)"],
+    code_2_vs_code_1_estimate = code_2_vs_code_1["Estimate"],
+    code_2_vs_code_1_std_error = code_2_vs_code_1["Std. Error"],
+    code_2_vs_code_1_z_value = code_2_vs_code_1["z value"],
+    code_2_vs_code_1_p_value = code_2_vs_code_1["Pr(>|z|)"]
+)
+
+# Output name 
+output_name <- paste0("pair_", code_1, "_", code_2, "_", cohort_code, ".csv")
+
+write.csv(report_df, output_name, row.names = FALSE)
