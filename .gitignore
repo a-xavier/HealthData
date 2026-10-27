@@ -13,3 +13,5 @@ UKB/
 # all pairs is too big
 Reference/all_pairs.txt
 Reference/all_observed_pair.txt
+# Any csv file inside processing
+Processing/**/*.csv

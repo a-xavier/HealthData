@@ -1,7 +1,7 @@
 library(tidyverse)
 library(data.table)
-gs_df = fread("/Users/alex/Library/CloudStorage/OneDrive-TheUniversityofNewcastle/Cairns_Group/ICD10_Project_Official/Generation_Scotland/Final_Data_GS.csv")
-ukb_df = fread("/Users/alex/Library/CloudStorage/OneDrive-TheUniversityofNewcastle/Cairns_Group/ICD10_Project_Official/UKB/Final_Data_UKB.csv")
+gs_df = fread("/Users/alex/Documents/ICD10_Project_Official/Generation_Scotland/Final_Data_GS.csv")
+ukb_df = fread("/Users/alex/Documents/ICD10_Project_Official/UKB/Final_Data_UKB.csv")
 
 # Age 
 
@@ -12,6 +12,8 @@ ukb_df = fread("/Users/alex/Library/CloudStorage/OneDrive-TheUniversityofNewcast
 continuous_covariates = c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6", "PC7", "PC8", "PC9", "PC10",
                           "dpw_moderate_activity", "dpw_vigorous_activity",
                           "age_at_recruitment", "drinking_events_per_month", "BMI")
+
+quantile(ukb_df$age_at_recruitment, na.rm = T)
 
 for (covar in continuous_covariates) {
   gs_covar = gs_df[, c("eid", covar), with = FALSE]

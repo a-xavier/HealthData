@@ -32,22 +32,31 @@ output_file <- args[[4]]
 
 if (!file.exists(pair_batch_file)) {
     stop(
-        paste("Pair batch file does not exist:", pair_batch_file),
+        paste(
+            "Pair batch file does not exist:",
+            pair_batch_file
+        ),
         call. = FALSE
     )
 }
 
 if (!file.exists(final_df)) {
     stop(
-        paste("Input dataframe does not exist:", final_df),
+        paste(
+            "Input dataframe does not exist:",
+            final_df
+        ),
         call. = FALSE
     )
 }
 
 message(
-    "Processing pair batch: ", pair_batch_file,
-    " for cohort ", cohort_code,
-    " using ", final_df
+    "Processing pair batch: ",
+    pair_batch_file,
+    " for cohort ",
+    cohort_code,
+    " using ",
+    final_df
 )
 
 
@@ -76,14 +85,23 @@ pairs <- fread(
 
 if (nrow(pairs) == 0L) {
     stop(
-        paste("The pair batch is empty:", pair_batch_file),
+        paste(
+            "The pair batch is empty:",
+            pair_batch_file
+        ),
         call. = FALSE
     )
 }
 
-if (anyNA(pairs$code_1) || anyNA(pairs$code_2)) {
+if (
+    anyNA(pairs$code_1) ||
+    anyNA(pairs$code_2)
+) {
     stop(
-        paste("The pair batch contains missing code values:", pair_batch_file),
+        paste(
+            "The pair batch contains missing code values:",
+            pair_batch_file
+        ),
         call. = FALSE
     )
 }
@@ -116,17 +134,17 @@ covariates <- if (cohort_code == "GS") {
     base_covariates
 }
 
-required_columns <- unique(c(
-    "all_levels",
-    covariates
-))
+required_columns <- unique(
+    c(
+        "all_levels",
+        covariates
+    )
+)
 
 
 # ==================================== #
 #          LOAD COHORT DATA             #
 # ==================================== #
-
-load_start <- proc.time()[["elapsed"]]
 
 df <- fread(
     final_df,
@@ -137,22 +155,25 @@ df <- fread(
     check.names = FALSE
 )
 
-load_elapsed <- proc.time()[["elapsed"]] - load_start
-
 message(
-    "Loaded ", nrow(df),
-    " rows in ",
-    round(load_elapsed, 3),
-    " seconds"
+    "Loaded ",
+    nrow(df),
+    " rows"
 )
 
-missing_columns <- setdiff(required_columns, names(df))
+missing_columns <- setdiff(
+    required_columns,
+    names(df)
+)
 
 if (length(missing_columns) > 0L) {
     stop(
         paste(
             "Required columns are missing:",
-            paste(missing_columns, collapse = ", ")
+            paste(
+                missing_columns,
+                collapse = ", "
+            )
         ),
         call. = FALSE
     )
@@ -163,7 +184,8 @@ if (length(missing_columns) > 0L) {
 #           CODE STRINGS                #
 # ==================================== #
 
-# A missing all_levels value is treated as having no recorded codes.
+# Participants with missing all_levels values are treated as having
+# no recorded codes.
 all_levels <- df$all_levels
 all_levels[is.na(all_levels)] <- ""
 
@@ -174,21 +196,22 @@ participant_count <- length(all_levels)
 #       COMPLETE-CASE POPULATION        #
 # ==================================== #
 
-complete_case_start <- proc.time()[["elapsed"]]
-
 complete_rows <- complete.cases(
     df[, covariates, drop = FALSE]
 )
 
 glm_n <- sum(complete_rows)
-glm_excluded_n <- length(complete_rows) - glm_n
 
-complete_case_elapsed <-
-    proc.time()[["elapsed"]] - complete_case_start
+glm_excluded_n <- (
+    length(complete_rows) -
+    glm_n
+)
 
 message(
-    "GLM complete cases: ", glm_n,
-    "; excluded due to missing covariates: ", glm_excluded_n
+    "GLM complete cases: ",
+    glm_n,
+    "; excluded due to missing covariates: ",
+    glm_excluded_n
 )
 
 if (glm_n == 0L) {
@@ -203,16 +226,14 @@ if (glm_n == 0L) {
 #       COVARIATE MODEL MATRIX          #
 # ==================================== #
 
-matrix_start <- proc.time()[["elapsed"]]
-
-covariate_formula <- reformulate(covariates)
+covariate_formula <- reformulate(
+    covariates
+)
 
 covariate_matrix <- model.matrix(
     covariate_formula,
     data = df[complete_rows, , drop = FALSE]
 )
-
-matrix_elapsed <- proc.time()[["elapsed"]] - matrix_start
 
 message(
     "Covariate matrix dimensions: ",
@@ -224,16 +245,12 @@ message(
 message(
     "Covariate matrix size: ",
     round(
-        as.numeric(object.size(covariate_matrix)) / 1024^2,
+        as.numeric(
+            object.size(covariate_matrix)
+        ) / 1024^2,
         2
     ),
     " MB"
-)
-
-message(
-    "Covariate matrix constructed in ",
-    round(matrix_elapsed, 3),
-    " seconds"
 )
 
 
@@ -241,10 +258,6 @@ message(
 #       CODE MEMBERSHIP CACHE           #
 # ==================================== #
 
-# Membership vectors are cached within this batch.
-#
-# If the same code occurs in several pairs, grepl() is performed only
-# once for that code during this R invocation.
 code_membership_cache <- new.env(
     hash = TRUE,
     parent = emptyenv()
@@ -252,7 +265,10 @@ code_membership_cache <- new.env(
 
 get_code_membership <- function(code) {
 
-    cache_key <- paste0("code_", code)
+    cache_key <- paste0(
+        "code_",
+        code
+    )
 
     if (!exists(
         cache_key,
@@ -284,8 +300,10 @@ get_code_membership <- function(code) {
 #       GENERAL HELPERS                 #
 # ==================================== #
 
-safe_divide <- function(numerator, denominator) {
-
+safe_divide <- function(
+    numerator,
+    denominator
+) {
     if (
         length(numerator) == 0L ||
         length(denominator) == 0L ||
@@ -359,23 +377,6 @@ empty_glm_statistics <- function() {
 }
 
 
-combine_warning_messages <- function(...) {
-
-    messages <- unlist(list(...), use.names = FALSE)
-
-    messages <- messages[
-        !is.na(messages) &
-        nzchar(messages)
-    ]
-
-    if (length(messages) == 0L) {
-        return(NA_character_)
-    }
-
-    paste(unique(messages), collapse = " | ")
-}
-
-
 # ==================================== #
 #          FAST GLM HELPER              #
 # ==================================== #
@@ -383,40 +384,27 @@ combine_warning_messages <- function(...) {
 fit_target_glm <- function(
     design_matrix,
     response,
-    target_column,
-    model_label
+    target_column
 ) {
     result <- list(
         statistics = empty_glm_statistics(),
-        converged = FALSE,
-        iterations = NA_integer_,
-        warning = NA_character_
+        converged = FALSE
     )
 
+    # The binary outcome must contain both zero and one.
     if (length(unique(response)) < 2L) {
-        result$warning <- paste(
-            model_label,
-            "was skipped because its response has no variation"
-        )
-
         return(result)
     }
 
     target_values <- design_matrix[, target_column]
 
+    # The target predictor must also contain both zero and one.
     if (length(unique(target_values)) < 2L) {
-        result$warning <- paste(
-            model_label,
-            "was skipped because its target predictor has no variation"
-        )
-
         return(result)
     }
 
-    captured_warnings <- character()
-
     fit <- tryCatch(
-        withCallingHandlers(
+        suppressWarnings(
             fastglm::fastglm(
                 x = design_matrix,
                 y = response,
@@ -426,23 +414,9 @@ fit_target_glm <- function(
                     tol = 1e-8,
                     maxit = 25L
                 )
-            ),
-            warning = function(w) {
-                captured_warnings <<- c(
-                    captured_warnings,
-                    conditionMessage(w)
-                )
-
-                invokeRestart("muffleWarning")
-            }
+            )
         ),
         error = function(e) {
-            result$warning <<- paste(
-                model_label,
-                "failed:",
-                conditionMessage(e)
-            )
-
             NULL
         }
     )
@@ -451,34 +425,15 @@ fit_target_glm <- function(
         return(result)
     }
 
-    if (!is.null(fit$converged)) {
-        result$converged <- isTRUE(fit$converged)
-    }
-
-    if (!is.null(fit$iter)) {
-        result$iterations <- as.integer(fit$iter)
-    } else if (!is.null(fit$iterations)) {
-        result$iterations <- as.integer(fit$iterations)
-    }
-
-    if (length(captured_warnings) > 0L) {
-        result$warning <- combine_warning_messages(
-            result$warning,
-            captured_warnings
-        )
-    }
+    result$converged <- isTRUE(
+        fit$converged
+    )
 
     coefficient_table <- tryCatch(
-        summary(fit)$coefficients,
+        suppressWarnings(
+            summary(fit)$coefficients
+        ),
         error = function(e) {
-            result$warning <<- combine_warning_messages(
-                result$warning,
-                paste(
-                    "Could not calculate coefficient statistics:",
-                    conditionMessage(e)
-                )
-            )
-
             NULL
         }
     )
@@ -488,27 +443,26 @@ fit_target_glm <- function(
     }
 
     if (!target_column %in% rownames(coefficient_table)) {
-        result$warning <- combine_warning_messages(
-            result$warning,
-            paste(
-                "Coefficient",
-                target_column,
-                "was not estimable in",
-                model_label
-            )
-        )
+        return(result)
+    }
 
+    required_statistics <- c(
+        "Estimate",
+        "Std. Error",
+        "z value",
+        "Pr(>|z|)"
+    )
+
+    if (!all(
+        required_statistics %in%
+            colnames(coefficient_table)
+    )) {
         return(result)
     }
 
     result$statistics <- coefficient_table[
         target_column,
-        c(
-            "Estimate",
-            "Std. Error",
-            "z value",
-            "Pr(>|z|)"
-        )
+        required_statistics
     ]
 
     result
@@ -524,24 +478,45 @@ process_pair <- function(
     code_2,
     observed_both_count
 ) {
-    pair_start <- proc.time()[["elapsed"]]
 
     # -------------------------------- #
     # Code membership                   #
     # -------------------------------- #
 
-    matching_start <- proc.time()[["elapsed"]]
+    code_1_present <- get_code_membership(
+        code_1
+    )
 
-    code_1_present <- get_code_membership(code_1)
-    code_2_present <- get_code_membership(code_2)
+    code_2_present <- get_code_membership(
+        code_2
+    )
 
-    code_1_count <- sum(code_1_present)
-    code_2_count <- sum(code_2_present)
-    both_count <- sum(code_1_present & code_2_present)
+    code_1_count <- sum(
+        code_1_present
+    )
 
-    cell_c <- as.numeric(both_count)
-    cell_a <- as.numeric(code_1_count - both_count)
-    cell_b <- as.numeric(code_2_count - both_count)
+    code_2_count <- sum(
+        code_2_present
+    )
+
+    both_count <- sum(
+        code_1_present &
+        code_2_present
+    )
+
+    cell_c <- as.numeric(
+        both_count
+    )
+
+    cell_a <- as.numeric(
+        code_1_count -
+        both_count
+    )
+
+    cell_b <- as.numeric(
+        code_2_count -
+        both_count
+    )
 
     cell_d <- as.numeric(
         participant_count -
@@ -549,9 +524,6 @@ process_pair <- function(
         cell_b -
         cell_c
     )
-
-    matching_elapsed <-
-        proc.time()[["elapsed"]] - matching_start
 
 
     # -------------------------------- #
@@ -568,29 +540,13 @@ process_pair <- function(
         nrow = 2L
     )
 
-    fisher_warning <- NA_character_
-
     fisher_result <- tryCatch(
-        withCallingHandlers(
-            fisher.test(fisher_matrix),
-            warning = function(w) {
-                fisher_warning <<- combine_warning_messages(
-                    fisher_warning,
-                    conditionMessage(w)
-                )
-
-                invokeRestart("muffleWarning")
-            }
+        suppressWarnings(
+            fisher.test(
+                fisher_matrix
+            )
         ),
         error = function(e) {
-            fisher_warning <<- combine_warning_messages(
-                fisher_warning,
-                paste(
-                    "Fisher test failed:",
-                    conditionMessage(e)
-                )
-            )
-
             NULL
         }
     )
@@ -598,14 +554,23 @@ process_pair <- function(
     if (is.null(fisher_result)) {
         odds_ratio <- NA_real_
         fisher_p_value <- NA_real_
+
         fisher_conf_int <- c(
             NA_real_,
             NA_real_
         )
     } else {
-        odds_ratio <- unname(fisher_result$estimate)
-        fisher_p_value <- fisher_result$p.value
-        fisher_conf_int <- unname(fisher_result$conf.int)
+        odds_ratio <- unname(
+            fisher_result$estimate
+        )
+
+        fisher_p_value <- (
+            fisher_result$p.value
+        )
+
+        fisher_conf_int <- unname(
+            fisher_result$conf.int
+        )
     }
 
 
@@ -692,8 +657,6 @@ process_pair <- function(
     # Logistic regression               #
     # -------------------------------- #
 
-    glm_start <- proc.time()[["elapsed"]]
-
     glm_code_1_response <- as.integer(
         code_1_present[complete_rows]
     )
@@ -702,7 +665,7 @@ process_pair <- function(
         code_2_present[complete_rows]
     )
 
-    # Construct one design matrix and reuse its final column.
+    # Construct one matrix and reuse its final column.
     design_matrix <- cbind(
         covariate_matrix,
         code_2 = glm_code_2_response
@@ -711,30 +674,30 @@ process_pair <- function(
     glm_code_1_result <- fit_target_glm(
         design_matrix = design_matrix,
         response = glm_code_1_response,
-        target_column = "code_2",
-        model_label = "code_1 ~ code_2 + covariates"
+        target_column = "code_2"
     )
 
-    # Reuse the same allocated design matrix for the reverse model.
+    # Replace the final predictor column for the reverse model.
     design_matrix[, ncol(design_matrix)] <-
         glm_code_1_response
 
-    colnames(design_matrix)[ncol(design_matrix)] <-
-        "code_1"
+    colnames(design_matrix)[
+        ncol(design_matrix)
+    ] <- "code_1"
 
     glm_code_2_result <- fit_target_glm(
         design_matrix = design_matrix,
         response = glm_code_2_response,
-        target_column = "code_1",
-        model_label = "code_2 ~ code_1 + covariates"
+        target_column = "code_1"
     )
 
     rm(design_matrix)
 
-    glm_elapsed <- proc.time()[["elapsed"]] - glm_start
+    code_1_vs_code_2 <-
+        glm_code_1_result$statistics
 
-    code_1_vs_code_2 <- glm_code_1_result$statistics
-    code_2_vs_code_1 <- glm_code_2_result$statistics
+    code_2_vs_code_1 <-
+        glm_code_2_result$statistics
 
 
     # -------------------------------- #
@@ -780,9 +743,9 @@ process_pair <- function(
     # Result row                        #
     # -------------------------------- #
 
-    pair_elapsed <- proc.time()[["elapsed"]] - pair_start
-
     data.table(
+        cohort_code = cohort_code,
+
         code_1 = code_1,
         code_2 = code_2,
 
@@ -794,23 +757,33 @@ process_pair <- function(
         both_codes = cell_c,
         neither_code = cell_d,
 
-        fisher_odds_ratio = odds_ratio,
-        fisher_p_value = fisher_p_value,
+        fisher_odds_ratio =
+            odds_ratio,
+
+        fisher_p_value =
+            fisher_p_value,
+
         fisher_conf_int_low =
             fisher_conf_int[[1]],
+
         fisher_conf_int_high =
             fisher_conf_int[[2]],
-        fisher_warning = fisher_warning,
 
         rr_code1_given_code2 =
             rr_code1_given_code2,
+
         rr_code2_given_code1 =
             rr_code2_given_code1,
 
-        phi_coefficient = phi_coefficient,
-        jaccard_index = jaccard_index,
+        phi_coefficient =
+            phi_coefficient,
 
-        glm_sample_size = glm_n,
+        jaccard_index =
+            jaccard_index,
+
+        glm_sample_size =
+            glm_n,
+
         glm_excluded_missing_covariates =
             glm_excluded_n,
 
@@ -837,12 +810,6 @@ process_pair <- function(
         code_1_vs_code_2_converged =
             glm_code_1_result$converged,
 
-        code_1_vs_code_2_iterations =
-            glm_code_1_result$iterations,
-
-        code_1_vs_code_2_warning =
-            glm_code_1_result$warning,
-
         code_2_vs_code_1_estimate =
             unname(
                 code_2_vs_code_1["Estimate"]
@@ -864,20 +831,7 @@ process_pair <- function(
             ),
 
         code_2_vs_code_1_converged =
-            glm_code_2_result$converged,
-
-        code_2_vs_code_1_iterations =
-            glm_code_2_result$iterations,
-
-        code_2_vs_code_1_warning =
-            glm_code_2_result$warning,
-
-        code_matching_seconds =
-            matching_elapsed,
-
-        glm_seconds = glm_elapsed,
-
-        pair_total_seconds = pair_elapsed
+            glm_code_2_result$converged
     )
 }
 
@@ -885,8 +839,6 @@ process_pair <- function(
 # ==================================== #
 #       PROCESS COMPLETE BATCH          #
 # ==================================== #
-
-batch_start <- proc.time()[["elapsed"]]
 
 results <- vector(
     mode = "list",
@@ -915,7 +867,8 @@ for (pair_index in seq_len(nrow(pairs))) {
     results[[pair_index]] <- process_pair(
         code_1 = code_1,
         code_2 = code_2,
-        observed_both_count = observed_both_count
+        observed_both_count =
+            observed_both_count
     )
 }
 
@@ -924,15 +877,6 @@ report_df <- rbindlist(
     use.names = TRUE,
     fill = TRUE
 )
-
-batch_elapsed <- proc.time()[["elapsed"]] - batch_start
-
-report_df[, data_load_seconds := load_elapsed]
-report_df[, complete_case_seconds := complete_case_elapsed]
-report_df[, model_matrix_seconds := matrix_elapsed]
-report_df[, batch_total_seconds := batch_elapsed]
-report_df[, batch_pair_count := nrow(pairs)]
-report_df[, cohort_code := cohort_code]
 
 
 # ==================================== #
@@ -949,18 +893,22 @@ fwrite(
 )
 
 message(
-    "Processed ", nrow(report_df),
-    " pairs in ",
-    round(batch_elapsed, 3),
-    " seconds"
+    "Processed ",
+    nrow(report_df),
+    " pairs"
 )
 
 message(
     "Cached membership vectors: ",
-    length(ls(
-        envir = code_membership_cache,
-        all.names = TRUE
-    ))
+    length(
+        ls(
+            envir = code_membership_cache,
+            all.names = TRUE
+        )
+    )
 )
 
-message("Wrote output: ", output_file)
+message(
+    "Wrote output: ",
+    output_file
+)

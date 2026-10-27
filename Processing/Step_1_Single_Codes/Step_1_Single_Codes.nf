@@ -2,7 +2,7 @@
 // age sex smokever bmi drinking moderate_activ vigorous_activity (also family for GS) PC 1 to 5
 
 process ProcessSingleCode {
-
+    
     input:
         tuple val(code), val(sex_flag), val(sex_prop), val(phenotype_count)
         val cohort_code
